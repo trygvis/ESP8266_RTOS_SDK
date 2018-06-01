@@ -44,7 +44,10 @@ void MutexInit(Mutex* mutex)
 
 int MutexLock(Mutex* mutex)
 {
-    return xSemaphoreTake(mutex->sem, portMAX_DELAY);
+    // printf("[%s] SEM: take\n", pcTaskGetName(NULL));
+    int x = xSemaphoreTake(mutex->sem, portMAX_DELAY);
+    // printf("[%s] SEM: taken: %d\n", pcTaskGetName(NULL), x);
+    return x;
 }
 
 int MutexUnlock(Mutex* mutex)
@@ -106,10 +109,12 @@ static int esp_read(Network* n, unsigned char* buffer, unsigned int len, unsigne
 
     vTaskSetTimeOutState(&xTimeOut); /* Record the time at which this function was entered. */
 
+    // printf("%s: len=%d, timeout_ms=%d\n", __FUNCTION__, len, timeout_ms);
     if (select(n->my_socket + 1, &fdset, NULL, NULL, &timeout) > 0) {
         if (FD_ISSET(n->my_socket, &fdset)) {
             do {
                 rc = recv(n->my_socket, buffer + recvLen, len - recvLen, MSG_DONTWAIT);
+                printf("[%s] %s: (pre) recvLen=%d, rc=%d\n", pcTaskGetName(NULL), __FUNCTION__, recvLen, rc);
 
                 if (rc > 0) {
                     recvLen += rc;
@@ -120,6 +125,8 @@ static int esp_read(Network* n, unsigned char* buffer, unsigned int len, unsigne
             } while (recvLen < len && xTaskCheckForTimeOut(&xTimeOut, &xTicksToWait) == pdFALSE);
         }
     }
+    else
+        printf(".");
 
     return recvLen;
 }

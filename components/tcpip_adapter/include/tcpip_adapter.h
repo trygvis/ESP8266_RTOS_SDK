@@ -41,7 +41,6 @@ typedef enum {
     TCPIP_ADAPTER_IF_MAX
 } tcpip_adapter_if_t;
 
-struct netif *esp_netif[TCPIP_ADAPTER_IF_MAX];
 char* hostname;
 bool default_hostname;
 

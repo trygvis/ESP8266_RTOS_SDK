@@ -29,6 +29,10 @@
 #include "net/sockio.h"
 #include "esp_socket.h"
 
+static struct netif *esp_netif[TCPIP_ADAPTER_IF_MAX];
+char* hostname;
+bool default_hostname;
+
 struct tcpip_adapter_pbuf {
     struct pbuf_custom  pbuf;
 

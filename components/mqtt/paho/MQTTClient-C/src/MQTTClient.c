@@ -39,7 +39,6 @@ static int sendPacket(MQTTClient* c, int length, Timer* timer)
     while (sent < length && !TimerIsExpired(timer))
     {
         rc = c->ipstack->mqttwrite(c->ipstack, &c->buf[sent], length, TimerLeftMS(timer));
-        printf("[%s] %s: rc=%d\n", pcTaskGetName(NULL), __FUNCTION__, rc);
         if (rc < 0)  // there was an error writing the data
             break;
         sent += rc;
@@ -116,10 +115,7 @@ static int readPacket(MQTTClient* c, Timer* timer)
     int rem_len = 0;
 
     /* 1. read the header byte.  This has the packet type in it */
-    int start = TimerLeftMS(timer);
-    int rc = c->ipstack->mqttread(c->ipstack, c->readbuf, 1, start);
-    // printf("[%s] %s: mqttread done in %d ms: rc=%d\n", pcTaskGetName(NULL), __FUNCTION__, start - TimerLeftMS(timer), rc);
-
+    int rc = c->ipstack->mqttread(c->ipstack, c->readbuf, 1, TimerLeftMS(timer));
     if (rc != 1)
         goto exit;
 
@@ -145,7 +141,6 @@ static int readPacket(MQTTClient* c, Timer* timer)
     if (c->keepAliveInterval > 0)
         TimerCountdown(&c->last_received, c->keepAliveInterval); // record the fact that we have successfully received a packet
 exit:
-    // printf("[%s] %s: all done in %d ms\n", pcTaskGetName(NULL), __FUNCTION__, start - TimerLeftMS(timer));
     return rc;
 }
 
@@ -252,7 +247,6 @@ void MQTTCleanSession(MQTTClient* c)
 
 void MQTTCloseSession(MQTTClient* c)
 {
-    printf("[%s] CLOSING SESSION\n", pcTaskGetName(NULL));
     c->ping_outstanding = 0;
     c->isconnected = 0;
     if (c->cleansession)
@@ -266,10 +260,6 @@ int cycle(MQTTClient* c, Timer* timer)
         rc = SUCCESS;
 
     int packet_type = readPacket(c, timer);     /* read the socket, see what work is due */
-
-    if (packet_type != 0) {
-        printf("[%s] %s: packet_type=%s\n", pcTaskGetName(NULL), __FUNCTION__, MQTTPacket_msgTypesToString(packet_type));
-    }
 
     switch (packet_type)
     {
@@ -344,9 +334,6 @@ exit:
         rc = packet_type;
     else if (c->isconnected)
         MQTTCloseSession(c);
-    else {
-        // printf("%s: isconnected=%d, rc=%d\n", __FUNCTION__, c->isconnected, rc);
-    }
     return rc;
 }
 
@@ -531,7 +518,6 @@ int MQTTSubscribeWithResults(MQTTClient* c, const char* topicFilter, enum QoS qo
     MQTTString topic = MQTTString_initializer;
     topic.cstring = (char *)topicFilter;
 
-    // printf("[%s] %s: getting lock\n", pcTaskGetName(NULL), __FUNCTION__);
 #if defined(MQTT_TASK)
     MutexLock(&c->mutex);
 #endif
@@ -540,25 +526,20 @@ int MQTTSubscribeWithResults(MQTTClient* c, const char* topicFilter, enum QoS qo
 
     TimerInit(&timer);
     TimerCountdownMS(&timer, c->command_timeout_ms);
-    // printf("[%s] %s: c->command_timeout_ms=%d\n", pcTaskGetName(NULL), __FUNCTION__, c->command_timeout_ms);
 
     len = MQTTSerialize_subscribe(c->buf, c->buf_size, 0, getNextPacketId(c), 1, &topic, (int*)&qos);
-    // printf("%s: len=%d\n", __FUNCTION__, len);
     if (len <= 0)
         goto exit;
     if ((rc = sendPacket(c, len, &timer)) != SUCCESS) // send the subscribe packet
         goto exit;             // there was a problem
-    // printf("%s: send ok\n", __FUNCTION__);
 
     if (waitfor(c, SUBACK, &timer) == SUBACK)      // wait for suback
     {
-        // printf("%s: SUBACK ok\n", __FUNCTION__);
         int count = 0;
         unsigned short mypacketid;
         data->grantedQoS = QOS0;
         if (MQTTDeserialize_suback(&mypacketid, 1, &count, (int*)&data->grantedQoS, c->readbuf, c->readbuf_size) == 1)
         {
-            // printf("%s: SUBACK deserialized\n", __FUNCTION__);
             if (data->grantedQoS != 0x80)
                 rc = MQTTSetMessageHandler(c, topicFilter, messageHandler);
         }

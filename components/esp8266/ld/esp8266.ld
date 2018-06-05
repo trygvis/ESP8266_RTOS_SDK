@@ -16,6 +16,10 @@
 
 #include "sdkconfig.h"
 
+#if !defined(CONFIG_ESP8266_APP_START_ADDRESS) || !defined(CONFIG_ESP8266_APP_SIZE)
+#error This file must be preprocessed, missing defines: ESP8266_APP_START_ADDRESS and/or CONFIG_ESP8266_APP_SIZE
+#endif
+
 MEMORY
 {
   dport0_0_seg :    org = 0x3FF00000, len = 0x10
@@ -27,7 +31,7 @@ MEMORY
   iram1_0_seg  :    org = 0x40100000, len = 0x8000
 
   /* It is actually mapped to flash. */
-  irom0_0_seg  :    org = 0x40201010, len = 0xFF000 - 0x10
+  irom0_0_seg  :    org = (CONFIG_ESP8266_APP_START_ADDRESS), len = (CONFIG_ESP8266_APP_SIZE)
 
   /* RTC memory, persists over deep sleep. */
   rtc_seg      :    org = 0x60001200, len = 0x200

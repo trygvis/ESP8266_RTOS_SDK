@@ -1,0 +1,37 @@
+menu "ESP8266"
+
+config ESP8266_APP_START_ADDRESS
+    hex "Start address of application"
+    default 0x40201010
+
+config ESP8266_APP_SIZE
+    hex "Max number of bytes reserved for application"
+    default 0xFEFF0 # (0xFF000 - 0x10)
+
+config ESP8266_APP_FLASH_ADDRESS
+    hex "Load address in flash"
+    default 0x1000
+
+choice ESP8266_BOOTLOADER
+    prompt "Select bootloader"
+    default ESP8266_BOOTLOADER_ESPRESSIF
+    help
+      Select which bootloader to use
+
+config ESP8266_BOOTLOADER_ESPRESSIF
+    bool "Espressif's bootloader"
+config ESP8266_BOOTLOADER_CUSTOM
+    bool "Custom"
+endchoice
+
+config ESP8266_BOOTLOADER_CUSTOM_VAL
+    string "Path to bootloader .bin file" if ESP8266_BOOTLOADER_CUSTOM
+    help
+      The path is relative to the project directory
+
+config ESP8266_BOOTLOADER
+    string
+    default "ESPRESSIF" if ESP8266_BOOTLOADER_ESPRESSIF
+    default "CUSTOM" if ESP8266_BOOTLOADER_CUSTOM
+
+endmenu

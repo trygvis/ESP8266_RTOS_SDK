@@ -224,6 +224,31 @@ clean:
 	rm -f $(CLEAN_FILES)
 endif
 
+COMPONENT_SRCS := $(foreach d,$(COMPONENT_SRCDIRS) $(COMPONENT_ADD_INCLUDEDIRS),$(wildcard $(COMPONENT_PATH)/$(d)/*.h))
+COMPONENT_SRCS += $(foreach d,$(COMPONENT_SRCDIRS),$(wildcard $(COMPONENT_PATH)/$(d)/*.c))
+COMPONENT_SRCS += $(foreach d,$(COMPONENT_SRCDIRS),$(wildcard $(COMPONENT_PATH)/$(d)/*.cpp))
+COMPONENT_SRCS += $(foreach d,$(COMPONENT_SRCDIRS),$(wildcard $(COMPONENT_PATH)/$(d)/*.cc))
+COMPONENT_SRCS += $(foreach d,$(COMPONENT_SRCDIRS),$(wildcard $(COMPONENT_PATH)/$(d)/*.S))
+COMPONENT_SRCS := $(patsubst $(COMPONENT_PATH)/%,%,$(COMPONENT_SRCS))
+COMPONENT_SRCS := $(call uniq,$(COMPONENT_SRCS))
+COMPONENT_SRCS := $(sort $(COMPONENT_SRCS))
+COMPONENT_SRCS := $(call stripLeadingParentDirs,$(COMPONENT_SRCS))
+
+COMPONENT_FORMAT := $(patsubst %.h,%.format, \
+	$(patsubst %.c,%.format, \
+	$(patsubst %.cpp,%.format, \
+	$(patsubst %.cc,%.format, \
+	$(patsubst %.S,%.format,$(COMPONENT_SRCS))))))
+
+format-info:
+	@for dir in $(COMPONENT_SRCS); do echo COMPONENT_SRCS $$dir; done
+	@echo "------------------------------"
+	@for dir in $(COMPONENT_FORMAT); do echo COMPONENT_FORMAT $$dir; done
+.PHONY: format-info
+
+format: format-info $(COMPONENT_FORMAT)
+.PHONY: format
+
 DEBUG_FLAGS ?= -ggdb
 
 # Include all dependency files already generated
@@ -246,7 +271,6 @@ define GenerateCompileTargets
 # $(1) - directory containing source files, relative to $(COMPONENT_PATH) - one of $(COMPONENT_SRCDIRS)
 # $(2) - output build directory, which is $(1) with any leading ".."s converted to "."s to ensure output is always under build/
 #
-
 $(2)/%.o: $$(COMPONENT_PATH)/$(1)/%.c $(COMMON_MAKEFILES) $(COMPONENT_MAKEFILE) | $(COMPONENT_OBJDIRS)
 	$$(summary) CC $$(patsubst $$(PWD)/%,%,$$(CURDIR))/$$@
 	$$(CC) $$(CFLAGS) $$(CPPFLAGS) $$(addprefix -I ,$$(COMPONENT_INCLUDES)) $$(addprefix -I ,$$(COMPONENT_EXTRA_INCLUDES)) -I $(1) -c $$(abspath $$<) -o $$@
@@ -266,7 +290,9 @@ $(2)/%.o: $$(COMPONENT_PATH)/$(1)/%.S $(COMMON_MAKEFILES) $(COMPONENT_MAKEFILE) 
 	$$(summary) AS $$(patsubst $$(PWD)/%,%,$$(CURDIR))/$$@
 	$$(CC) $$(CPPFLAGS) $$(DEBUG_FLAGS) $$(addprefix -I ,$$(COMPONENT_INCLUDES)) $$(addprefix -I ,$$(COMPONENT_EXTRA_INCLUDES)) -I $(1) -c $$(abspath $$<) -o $$@
 	$(call AppendSourceToDependencies,$$<,$$@)
+endef
 
+define GenerateMkdirTargets
 # CWD is build dir, create the build subdirectory if it doesn't exist
 #
 # (NB: Each .o file depends on all relative component build dirs $(COMPONENT_OBJDIRS), including $(2), to work
@@ -281,8 +307,42 @@ $(2):
 	mkdir -p $(2)
 endef
 
+define GenerateFormatTargets
+$(2)/%.format: $$(COMPONENT_PATH)/$(1)/%.h | $(2)
+	$$(summary) FORMAT $$(patsubst $$(PWD)/%,%,$$(CURDIR))/$$@
+	$$(IDF_PATH)/tools/format.sh $$<
+	touch $$@
+
+$(2)/%.format: $$(COMPONENT_PATH)/$(1)/%.c | $(2)
+	$$(summary) FORMAT $$(patsubst $$(PWD)/%,%,$$(CURDIR))/$$@
+	$$(IDF_PATH)/tools/format.sh $$<
+	touch $$@
+
+$(2)/%.format: $$(COMPONENT_PATH)/$(1)/%.cpp | $(2)
+	$$(summary) FORMAT $$(patsubst $$(PWD)/%,%,$$(CURDIR))/$$@
+	$$(IDF_PATH)/tools/format.sh $$<
+	touch $$@
+
+$(2)/%.format: $$(COMPONENT_PATH)/$(1)/%.cc | $(2)
+	$$(summary) FORMAT $$(patsubst $$(PWD)/%,%,$$(CURDIR))/$$@
+	$$(IDF_PATH)/tools/format.sh $$<
+	touch $$@
+
+# There are no tool for reformatting .S files, so we just touch the cookie files.
+$(2)/%.format: $$(COMPONENT_PATH)/$(1)/%.S | $(2)
+	touch $$@
+endef
+
 # Generate all the compile target patterns
 $(foreach srcdir,$(COMPONENT_SRCDIRS), $(eval $(call GenerateCompileTargets,$(srcdir),$(call stripLeadingParentDirs,$(srcdir)))))
+
+$(foreach srcdir, \
+		$(call uniq,$(COMPONENT_ADD_INCLUDEDIRS) $(COMPONENT_SRCDIRS)), \
+		$(eval $(call GenerateFormatTargets,$(srcdir),$(call stripLeadingParentDirs,$(srcdir)))))
+
+$(foreach srcdir, \
+		$(call uniq,$(COMPONENT_ADD_INCLUDEDIRS) $(COMPONENT_SRCDIRS)), \
+		$(eval $(call GenerateMkdirTargets,$(srcdir),$(call stripLeadingParentDirs,$(srcdir)))))
 
 ## Support for embedding binary files into the ELF as symbols
 
@@ -336,4 +396,3 @@ component_project_vars.mk::  # no need to add variables via component.mk
 	@echo '# COMPONENT_CONFIG_ONLY target sets no variables here' > $@
 
 endif  # COMPONENT_CONFIG_ONLY
-

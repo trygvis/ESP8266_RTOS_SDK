@@ -86,6 +86,7 @@ int _spiffs_close_r(struct _reent *r, int fd);
 int _spiffs_rename_r(struct _reent *r, const char *from, const char *to);
 int _spiffs_unlink_r(struct _reent *r, const char *filename);
 int _spiffs_fstat_r(struct _reent *r, int fd, struct stat *s);
+int _spiffs_fs_errno();
 
 #ifdef __cplusplus
 }

@@ -1,5 +1,6 @@
 #include <fcntl.h>
 #include <stdio.h>
+#include <errno.h>
 
 #include "esp_spiffs.h"
 #include "spi_flash.h"
@@ -162,6 +163,19 @@ void esp_spiffs_deinit(u8_t format)
     }
 }
 
+static int to_errno() {
+    switch(SPIFFS_errno(&fs)) {
+        case SPIFFS_OK:
+            return 0;
+        case SPIFFS_ERR_NOT_FOUND:
+            return ENOENT;
+        case SPIFFS_ERR_FILE_CLOSED:
+            return EBADF;
+        default:
+            return EIO;
+    }
+}
+
 int _spiffs_open_r(struct _reent *r, const char *filename, int flags, int mode)
 {
     spiffs_mode sm = 0;
@@ -193,6 +207,7 @@ int _spiffs_open_r(struct _reent *r, const char *filename, int flags, int mode)
     /* if (flags && O_DIRECT) sm |= SPIFFS_DIRECT; */
 
     res = SPIFFS_open(&fs, (char *) filename, sm, 0);
+    r->_errno = to_errno();
 
     if (res >= 0) {
         res += NUM_SYS_FD;
@@ -210,6 +225,7 @@ _ssize_t _spiffs_read_r(struct _reent *r, int fd, void *buf, size_t len)
         res = -1;
     } else {
         res = SPIFFS_read(&fs, fd - NUM_SYS_FD, buf, len);
+        r->_errno = to_errno();
     }
 
     return SPIFFS_errno(&fs) == SPIFFS_ERR_END_OF_OBJECT ? 0 : res;
@@ -223,6 +239,8 @@ _ssize_t _spiffs_write_r(struct _reent *r, int fd, void *buf, size_t len)
     }
 
     int res = SPIFFS_write(&fs, fd - NUM_SYS_FD, (char *) buf, len);
+    r->_errno = to_errno();
+
     return res;
 }
 
@@ -243,10 +261,7 @@ _off_t _spiffs_lseek_r(struct _reent *r, int fd, _off_t where, int whence)
         }
 
         res = SPIFFS_lseek(&fs, fd - NUM_SYS_FD, where, whence);
-
-        if (res < 0) {
-            printf("lseek failed: %d\n", res);
-        }
+        r->_errno = to_errno();
     }
 
     return res < 0 ? -1 : res;
@@ -256,10 +271,13 @@ int _spiffs_close_r(struct _reent *r, int fd)
 {
 
     if (fd < NUM_SYS_FD) {
+        r->_errno = EBADF;
         return -1;
     }
 
     SPIFFS_close(&fs, fd - NUM_SYS_FD);
+    r->_errno = to_errno();
+
     return 0;
 }
 
@@ -267,13 +285,16 @@ int _spiffs_rename_r(struct _reent *r, const char *from, const char *to)
 {
 
     int res = SPIFFS_rename(&fs, (char *) from, (char *) to);
+    r->_errno = to_errno();
+
     return res;
 }
 
 int _spiffs_unlink_r(struct _reent *r, const char *filename)
 {
-
     int res = SPIFFS_remove(&fs, (char *) filename);
+    r->_errno = to_errno();
+
     return res;
 }
 
@@ -288,10 +309,12 @@ int _spiffs_fstat_r(struct _reent *r, int fd, struct stat *s)
         s->st_ino = fd;
         s->st_rdev = fd;
         s->st_mode = S_IFCHR | 0666;
+        r->_errno = 0;
         return 0;
     }
 
     res = SPIFFS_fstat(&fs, fd - NUM_SYS_FD, &ss);
+    r->_errno = to_errno();
 
     if (res < 0) {
         return res;
@@ -302,4 +325,9 @@ int _spiffs_fstat_r(struct _reent *r, int fd, struct stat *s)
     s->st_nlink = 1;
     s->st_size = ss.size;
     return 0;
+}
+
+int _spiffs_fs_errno()
+{
+    return SPIFFS_errno(&fs);
 }

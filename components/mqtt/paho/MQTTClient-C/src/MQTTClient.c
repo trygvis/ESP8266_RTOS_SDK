@@ -365,17 +365,24 @@ void MQTTRun(void* parm)
 
     TimerInit(&timer);
 
+    printf("%s starting\n", __FUNCTION__);
+
     while (1)
     {
         TimerCountdownMS(&timer, 500); /* Don't wait too long if no traffic is incoming */
 #if defined(MQTT_TASK)
         MutexLock(&c->mutex);
 #endif
+        if (!c->isconnected) {
+            break;
+        }
         cycle(c, &timer);
 #if defined(MQTT_TASK)
         MutexUnlock(&c->mutex);
 #endif
     }
+
+    printf("%s exiting\n", __FUNCTION__);
 }
 
 
